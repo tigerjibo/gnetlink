@@ -1,7 +1,7 @@
-service_netlink
+gnetlink
 ===============
 
-An implementation of the Netlink and the Generic Netlink, and their python interface.
+An example of the Netlink and the Generic Netlink, and their python interface.
 
 
 Netlink
