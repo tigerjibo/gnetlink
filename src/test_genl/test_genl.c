@@ -1,5 +1,139 @@
 /*
  * Copyright (C) 2014, xgfone <xgfone@126.com>
+ * Generic Netlink Doc: http://lwn.net/Articles/208755/
+ *
+ * =============================================================================
+ *
+ * The Generic Netlink mechanism is based on a client-server model. The Generic
+ * Netlink servers register families, which are a collection of well defined
+ * services, with the controller communicate with the server through these
+ * service registerations.
+ *
+ * genl_family: Family Type
+ * genl_ops:    Family Operation
+ *
+ *
+ * struct genl_family {
+ *     unsigned int     id;
+ *     unsigned int     hdrsize;
+ *     char             name[GENL_NAMSIZ];
+ *	   unsigned int     version;
+ *     unsigned int     maxattr;
+ *
+ *     // Private, NOT USE
+ *     struct nlattr ** attrbuf;
+ *     struct list_head ops_list;
+ *     struct list_head family_list;
+ * }
+ * @id: 应总是0x0，不应使用0x10。
+ * @hdrsize: 如果family使用一个特定的头（即在Generic Netlink协议头的基础上再添加一个自己的
+ *           私有协议头），则表示该头的大小。如果没有特定的头，则应总是0。
+ * @name: Family的名字，必须唯一；Controller会使用它来查找频道号（Channel），即字段id。
+ * @version: Faimily的版本号，可以随意指定。
+ * @maxattr: Faimily所使用的属性的最大个数。
+ *
+ *
+ * struct genl_ops {
+ *     u8                cmd;
+ *     unsigned int      flag;
+ *     struct nla_policy *policy;
+ *     int               (*doit)(struct sk_buff *skb, struct genl_info *info);
+ *     int               (*dumpit)(struct sk_buff *skb, struct ntlink_callback *cb);
+ *
+ *     // Private, NOT USE
+ *     struct list_head  ops_list;
+ * }
+ * @cmd: 在Family中必须唯一，表示一个操作。
+ * @flag: 表示该操作的特殊属性，如：是否需要ROOT权限（GENL_ADMIN_PERM）。如果有多个属性，则
+ *        使用 OR 连接。
+ * @policy: 定义该操作中请求消息的Netlink属性策略。如果指定，那么在调用操作处理器（即doit）
+ *          之前，Generic Netlink机制则使用这个策略去验证这个操作所请求的消息的所有属性。
+ *          这个属性策略是一个 struct nla_policy 结构体类型的数组，并通过属性号来索引。
+ *          struct nla_policy 结构体见下文。
+ * @doit: 返回 0 表示成功，返回负值表示失败；doit 处理器应该做所有的处理工作。
+ * @dumpit: 仅当Generic Netlink消息中设置了 NLM_F_DUMP 标志/属性时，dumpit 才会被调用。
+ *
+ *
+ * struct nla_policy {
+ *     u16 type;
+ *     u16 len;
+ * }
+ * @len:  如果 @type 是字符串，@len 是字符串的最大长度（不包括NULL）；
+ *        如果未知或为NLA_UNSPEC，@len 应设置成属性负载的正确长度。
+ * @type: 属性类型。如下：
+ *           NLA_UNSPEC
+ *           NLA_U8
+ *           NLA_U16
+ *           NLA_U32
+ *           NLA_U64
+ *           NLA_FLAG(bool)
+ *           NLA_MSECS
+ *           NLA_STRING
+ *           NLA_NUL_STRING
+ *           NLA_NESTED
+ *        其中，
+ *           NLA_MSECS: 64位时间值（以毫秒ms为单位）。
+ *           NLA_STRING: 可变长度字符串。
+ *           NLA_NUL_STRING: 以NULL结尾的可变长度字符串。
+ *           NLA_NESTED: A stream of attributes。
+ *
+ *
+ * struct genl_info {
+ *	  u32                 snd_seq;
+ *    u32                 snd_pid;
+ *    struct nlmsghdr *   nlhdr;
+ *    struct genlmsghdr * genlhdr;
+ *    void *              userhdr;
+ *    struct nlattr **    attrs;
+ * }
+ * @snd_seq: Generic Netlink的请求序列号。
+ * @snd_pid: 发送此请求的客户端的PID号。注：3.8以的内核版本将此字段改成了 portid。
+ * @nlhdr:   Generic Neltink请求的Netlink消息协议头。
+ * @genlhdr: Generic Neltink请求的Generic Netlink消息协议头。
+ * @userhdr: 如果Generic Netlink Family使用了特殊消息协议头，那么该字段就指向这个消息头的起始处。
+ * @attrs:   从请求中解析出来的Generic Netlink属性（如果在Generic Netlink Family定义中
+ *           指定了Netlink消息策略），并且这些属性已经经过了验证。
+ *
+ *
+ * Generic Neltink Message Format
+ * ==============================
+ *
+ *  0                                          31
+ * +--------------------------------------------+
+ * |      Netlink Message Header(nlmsghdr)      |
+ * +--------------------------------------------+
+ * | Generic Neltink Message Header(genlmsghdr) |
+ * +--------------------------------------------+
+ * |   Optional User Specific Message Header    |
+ * +--------------------------------------------+
+ * |  Optional Generic Netlink Message Payload  |
+ * +--------------------------------------------+
+ *
+ *
+ * Generic Netlink 一般使用方法
+ * 一、内核空间：
+ *    1、注册一个Generic Netlink Family（分为四步）
+ *      (1)定义一个Family；
+ *      (2)定义一个操作ops；
+ *      (3)注册一个Family；
+ *      (4)注册一个操作ops。
+ *
+ *    2、处理消息
+ *       <I> 发送(分为三步):
+ *           (1)为消息缓冲区分配内存；
+ *           (2)创建消息（Payload）；
+ *           (3)发送消息。
+ *      <II> 接收(分两种情况):
+ *           (1)典型地，内核扮演了Generic Netlink服务器的角色，这意味着消息的接收被Generic
+ *              Netlink 总线自动处理：一旦总线接收到了消息并确定了正确的路由，此消息将直接被
+ *              传递给与Family相关的、特定的操作（回调函数）来处理。
+ *           (2)如果内核作为一个客户端的角色，那么服务器的响应消息能够使用监听在 Generic
+ *              Netlink Socket上的标准内核Socket接口来接收。
+ *
+ * 二、用户空间：
+ *    (1)可以使用标准的Socket API来接收和发送Generic Netlink消息。
+ *    (2)也可以使用 libnl 库：  http://www.carisma.slowglass.com/~tgr/libnl/。
+ *
  */
 
 #include <linux/module.h>
