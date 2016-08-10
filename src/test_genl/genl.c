@@ -294,11 +294,13 @@ static PyMethodDef GENLMethods[] = {
 
 
 #if PYTHON_ABI_VERSION < 3
+/// For Python2
 void initgenl(void)
 {
 	(void)Py_InitModule("genl", GENLMethods);
 }
 #else
+/// For Python3
 static struct PyModuleDef GENLModule = {
         PyModuleDef_HEAD_INIT,
         "genl",

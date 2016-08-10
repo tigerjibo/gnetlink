@@ -219,11 +219,13 @@ static PyMethodDef NetlinkMethods[] = {
 
 
 #if PYTHON_ABI_VERSION < 3
+/// For Python2
 void init_netlink()
 {
 	(void)Py_InitModule("_netlink", NetlinkMethods);
 }
 #else
+/// For Python3
 static struct PyModuleDef NetlinkModule = {
 	PyModuleDef_HEAD_INIT,
 	"_netlink",
