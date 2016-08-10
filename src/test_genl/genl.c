@@ -292,8 +292,25 @@ static PyMethodDef GENLMethods[] = {
 	{"close", (PyCFunction)py_genl_close, METH_VARARGS, "Close the generic netlink socket"},
 };
 
+
+#if PYTHON_ABI_VERSION < 3
 void initgenl(void)
 {
 	(void)Py_InitModule("genl", GENLMethods);
 }
+#else
+static struct PyModuleDef GENLModule = {
+        PyModuleDef_HEAD_INIT,
+        "genl",
+        "The python wrapper of linux genl.",
+        -1,
+        GENLMethods
+};
+
+PyMODINIT_FUNC
+PyInit_genl()
+{
+        return PyModule_Create(&GENLModule);
+}
+#endif
 

@@ -1,4 +1,5 @@
 # coding: utf-8
+from __future__ import absolute_import, print_function
 
 import _netlink
 
@@ -76,6 +77,6 @@ class Netlink(object):
 
 if __name__ == "__main__":
     fd = Netlink()
-    print "Create a Netlink Socket"
+    print("Create a Netlink Socket")
     fd.close()
-    print "Close a Netlink Socket"
+    print("Close a Netlink Socket")

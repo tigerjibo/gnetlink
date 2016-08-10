@@ -218,7 +218,24 @@ static PyMethodDef NetlinkMethods[] = {
 };
 
 
+#if PYTHON_ABI_VERSION < 3
 void init_netlink()
 {
 	(void)Py_InitModule("_netlink", NetlinkMethods);
 }
+#else
+static struct PyModuleDef NetlinkModule = {
+	PyModuleDef_HEAD_INIT,
+	"_netlink",
+	"The python wrapper of linux netlink.",
+	-1,
+	NetlinkMethods
+};
+
+PyMODINIT_FUNC
+PyInit__netlink()
+{
+	return PyModule_Create(&NetlinkModule);
+}
+#endif
+
